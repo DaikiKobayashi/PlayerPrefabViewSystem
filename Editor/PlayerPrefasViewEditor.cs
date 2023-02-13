@@ -8,6 +8,7 @@ public sealed class PlayerPrefasViewEditor : EditorWindow
 {
     private static readonly string[] NON_TARGET_KEY = { "unity.cloud_userid", "unity.player_sessionid", "unity.player_session_count", "UnityGraphicsQuality" };
 
+    private List<(string key, string value, ValueType valType)> prefsCaches = new();
     private Dictionary<string, string> caches = new();
 
     // AddField
@@ -32,22 +33,13 @@ public sealed class PlayerPrefasViewEditor : EditorWindow
 
     private void OnGUI()
     {
-        AddKeyWindow();
-
-        using (new EditorGUILayout.VerticalScope())
-        {
-            foreach(var (key, value) in caches)
-                using (new EditorGUILayout.HorizontalScope())
-                {
-                    EditorGUILayout.LabelField(key);
-                    EditorGUILayout.LabelField(value);
-                }
-        }
+        AddValueView();
+        ValuesView();
     }
 
-    private void AddKeyWindow()
+    private void AddValueView()
     {
-        using (new EditorGUILayout.HorizontalScope())
+        using (new EditorGUILayout.VerticalScope())
         {
             addKey = EditorGUILayout.TextField(new GUIContent("key"), addKey);
             addValue = EditorGUILayout.TextField(new GUIContent("value"), addValue);
@@ -55,6 +47,9 @@ public sealed class PlayerPrefasViewEditor : EditorWindow
 
             if (GUILayout.Button("“o˜^"))
             {
+                if (string.IsNullOrEmpty(addKey) || string.IsNullOrEmpty(addValue))
+                    goto SkipAddPrefas;
+
                 Debug.Log($"Add PlayerPrefs key: {addKey}, value: {addValue}");
                 switch (addType)
                 {
@@ -71,39 +66,66 @@ public sealed class PlayerPrefasViewEditor : EditorWindow
 
                 PlayerPrefs.Save();
                 GetPlayerPrefas();
+            
+            SkipAddPrefas:;
+            }
+        }
+    }
+
+    Vector2 scroll = Vector2.zero;
+    private void ValuesView()
+    {
+        const int keyLabelWidth = 100;
+        const int keyTypeLabelWidth = 100;
+
+        using (new EditorGUILayout.VerticalScope(GUI.skin.window))
+        using (var scrollScope = new EditorGUILayout.ScrollViewScope(scroll))
+        {
+            scroll = scrollScope.scrollPosition;
+            using (new EditorGUILayout.HorizontalScope(GUI.skin.box))
+            {
+                EditorGUILayout.LabelField("key", GUILayout.Width(keyLabelWidth));
+                EditorGUILayout.LabelField("value", GUILayout.Width(keyTypeLabelWidth));
+                EditorGUILayout.LabelField("value type");
+            }
+
+            foreach (var (key, value, valType) in prefsCaches)
+            {
+                using (new EditorGUILayout.HorizontalScope(GUI.skin.box))
+                {
+                    EditorGUILayout.LabelField(key, GUILayout.Width(keyLabelWidth));
+                    EditorGUILayout.LabelField(valType.ToString(), GUILayout.Width(keyTypeLabelWidth));
+                    EditorGUILayout.LabelField(value);
+                }
             }
         }
     }
 
     private void GetPlayerPrefas()
     {
-        string GetValue(string x)
+        (string, string, ValueType) GetValue(string x)
         {
             string result = string.Empty;
 
             result = PlayerPrefs.GetString(x, null);
             if (result != null)
-                return result;
+                return (x, result, ValueType.String);
 
             result = PlayerPrefs.GetInt(x, 0).ToString();
             if (result != "0")
-                return result;
+                return (x, result, ValueType.Int);
 
             result = PlayerPrefs.GetFloat(x, 0).ToString();
             if (result != "0")
-                return result;
+                return (x, result, ValueType.Float);
 
-            return "value is not alive";
+            return (x, null, ValueType.String);
         }
 
         caches.Clear();
 
         var keys = GetPlayerPrefasKeys();
-        foreach(var key in keys)
-        {
-            if (!caches.TryAdd(key, GetValue(key)))
-                Debug.LogWarning($"Deplicate key as {key}");
-        }
+        prefsCaches = keys.Select(key => GetValue(key)).ToList();
     }
 
     private List<string> GetPlayerPrefasKeys()
